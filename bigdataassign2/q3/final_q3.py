@@ -1,0 +1,50 @@
+import sys,csv,decimal
+from pyspark import SparkContext, SparkConf
+def movies_mapformat(line): 
+  return(line[0],(line[1],line[2].split("|")))
+if _name_ == "_main_":
+  driver_conf = SparkConf().setAppName("Q3_findMovieStats").setMaster("local")
+  sparkcont = SparkContext.getOrCreate(conf = driver_conf)
+  input_ratings = sparkcont.textFile("/FileStore/tables/ratings.csv")
+  lines_split_includesHeader = input_ratings.map(lambda x: x.split(",")).filter(lambda x:len(x)==4)
+  just_header = lines_split_includesHeader.first()
+  lines_split_vals= lines_split_includesHeader.filter(lambda x: x!= just_header )
+  
+  calc_data_avg = lines_split_vals.map(lambda x: [int(x[1]),float(x[2])]).filter(lambda x:len(x)==2)
+  Count_sum = calc_data_avg.combineByKey(lambda value: (value, 1),lambda x, value: (x[0] + value, x[1] + 1),lambda x, y: (x[0] + y[0], x[1] + y[1])).filter(lambda x: len(x)==2)
+  averageByKey_res = Count_sum.map(lambda x: (x[0], x[1][0] / x[1][1]))
+
+  averageByKey_ressort_ = averageByKey.sortBy(lambda x: x[1])
+  find_ten_pairs_last = averageByKey_ressort_.take(10)
+  ten_pairs_last = sparkcont.parallelize(find_ten_pairs_last)
+  ten_pairs_movies = ten_pairs_last.map(lambda x:[str(x[0]),x[1]])
+  input_movies = sparkcont.textFile("/FileStore/tables/movies.csv")
+  movies_csvRead = input_movies.mapPartitions(lambda x: csv.reader(x))
+  movies_RDD= movies_csvRead.map(movies_mapformat)
+  splitbyLines_movies = movies_RDD.filter(lambda x: x[0] != 'movieId')
+  list_ofpair_movies = splitbyLines_movies.map(lambda x: [x[0],x[1][0]])
+  Movies_names_ratings = ten_pairs_movies.join(list_ofpair_movies)
+  Movie_names_ratings = Movies_names_ratings.map(lambda x:[x[0],x[1][1]])
+  ten_Movies_Names_Ratings = Movie_names_ratings.take(10)
+  ten_Movies_Names_Ratings = sparkcont.parallelize(ten_Movies_Names_Ratings)
+  
+  input_tags = sparkcont.textFile("/FileStore/tables/tags.csv")
+  Lines_includes_header_split = input_tags.map(lambda x: x.split(",")).filter(lambda x:len(x)==4)
+  headers = Lines_includes_header_split.first()
+  lines_split_headers = Lines_includes_header_split.filter(lambda x: x!=headers)
+  
+  movieId_tag_headers = lines_split_headers.map(lambda x:[x[1],x[2]])
+  movieId_tag_action = movieId_tag_headers.filter(lambda x: (x[1].strip()) == "action").filter(lambda x: len(x)==2)
+  all_movieIds = lines_split_vals.map(lambda x: [x[1],float(x[2])]).filter(lambda x:len(x)==2)
+  all_movieIds_tag_action_tuple = all_movieIds.join(movieId_tag_action)
+  all_movieIds_tag_action = all_movieIds_tag_action_tuple.map(lambda x: [x[0],float(x[1][0])])
+  Count_Sum_action = all_movieIds_tag_action.combineByKey(lambda value: (value, 1),lambda x, value: (x[0] + value, x[1] + 1),lambda x, y: (x[0] + y[0], x[1] + y[1]))
+  Avg_byKey_action = Count_Sum_action.map(lambda x: (x[0], x[1][0] / x[1][1]))  
+  
+  all_movies_thriller = splitbyLines_movies.filter(lambda x: ("Thriller" in (x[1][1])) )
+  all_movies_action_thriller_tuple = all_movieIds_tags_action.join(all_movies_thriller)
+  all_movies_action_thriller = all_movies_action_thriller_tuple.map(lambda x: [x[0],float(x[1][0])])
+  sumCount_action_thriller = all_movies_action_thriller.combineByKey(lambda value: (value, 1),lambda x, value: (x[0] + value, x[1] + 1),lambda x, y: (x[0] + y[0], x[1] + y[1]))
+  Avg_byKey_action_thriller = sumCount_action_thriller.map(lambda x: (x[0], x[1][0] / x[1][1]))
+  Avg_byKey_action_thriller.coalesce(1).saveAsTextFile("/FileStore/tables/ques_1/checkresult")
+  #print(Avg_byKey_action_thriller.collect())
